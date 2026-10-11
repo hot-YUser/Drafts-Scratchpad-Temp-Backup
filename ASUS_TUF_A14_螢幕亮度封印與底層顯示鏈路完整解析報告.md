@@ -190,6 +190,9 @@
 | **`684c3e69-a4f7-4014-8754-d45179a56167`**<br>(`ADVANCEDCOLORQUALITYBIAS`) | 進階色彩品質偏向 | • **`0`**：偏向省電<br>• **`1`**：偏向視覺畫質 | AC: `1`<br>**DC: `0`** | **AC: `1`**<br>**DC: `1`** | 控制使用電池時是否允許 Windows DWM 為省電而降低色彩與亮度精度。已將電池模式也改為 **`1`（永遠畫質優先）**。 |
 | **`fbd9aa66-9553-4097-ba44-ed6e9d65eab8`**<br>(`ADAPTBRIGHT`) | 啟用自動調整亮度 | • **`0`**：關閉<br>• **`1`**：開啟 | AC: `0`<br>DC: `0` | AC: `0`<br>DC: `0` | 環境光感測器自動亮度開關（本機無環境光感測器，固定為 `0`）。 |
 | **`aded5e82-b909-4619-9949-f5d71dac0bcb`**<br>(`VIDEONORMALLEVEL`) | 顯示器亮度 | `0` ～ `100` (%) | `100%` (0x64) | 依使用者滑桿 | 電源計畫記錄的基準亮度百分比。 |
+| **`13d09884-f74e-474a-a852-b6bde8ad03a8`**<br>(`SUB_ENERGYSAVER` \ `ESBRIGHTNESS`) | 省電模式顯示器亮度權重 | `0` ～ `100` (%)<br>• 關閉時：`100%` (`0x64`)<br>• 開啟時預設：**`70%` (`0x46`)** | `70%` (`0x46`) | `70%` (`0x46`) | 當開啟 Windows 原生「省電模式時降低螢幕亮度」時，系統會將當前亮度乘以此權重（例如原本 `65%` $\times 70\% = 45.5\% \to \mathbf{46\%}$）。屬於純硬體背光打折，不竄改 Gamma 或 LUT。 |
+| **`5c5bb349-ad29-4ee2-9d0b-2b25270f7a81`**<br>(`SUB_ENERGYSAVER` \ `ESPOLICY`) | 省電模式原則 | • **`0`**：停用<br>• **`1`**：啟用 | AC: `0`<br>DC: `1` | AC: `0`<br>DC: `1` | 控制離電時省電模式的套用原則。 |
+| **`e69653ca-cf7f-4f05-aa73-cb833fa90ad4`**<br>(`SUB_ENERGYSAVER` \ `ESBATTTHRESHOLD`) | 省電模式自動觸發電量門檻 | `0` ～ `100` (%) | AC: `0%`<br>DC: **`30%` (`0x1E`)** | AC: `0%`<br>DC: `30%` | 電池電量低於該百分比時自動啟動省電模式。 |
 
 #### (B) Windows 顯示器資料儲存區（`MonitorDataStore`）与 DPI 縮放
 * **MonitorDataStore 路徑**：`HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\MonitorDataStore\TMA20710_22_07E8_EB`
@@ -217,6 +220,20 @@
 | **工作排程器** | `AsusSystemDiagnosis_DriverQuality` | `Ready` (`State 3`) | **`Disabled` (`State 1`)** | 定時收集驅動遙測。 |
 
 *(註：觸控板服務 `AsusPTPService` 與輸入法服務 `AsusIMESystemService` 屬於正常輸入硬體所需，予以保留。)*
+
+---
+
+### 2.6 第六層：三種 GPU 切換模式的底層顯示拓樸與背光控制權實測對照
+
+本機支援三種顯示輸出拓樸，實測底層 WMI（`WmiMonitorConnectionParams` / `WmiMonitorBrightness`）與 `QueryDisplayConfig` 行為差異如下：
+
+| 比較維度 | 1. 混合輸出 (Optimus / Standard)<br>`Mux flag = 1` (AMD 顯示) | 2. 動態切換 (Advanced Optimus / NVIDIA GPU Only)<br>`Mux flag = 1` (免重啟熱切換) | 3. 獨顯直連 (Ultimate Mode)<br>`Mux flag = 0` (重啟硬體 MUX 直連) |
+| :--- | :--- | :--- | :--- |
+| **活動螢幕實例 (`InstanceName`)** | 僅 `UID512_0` (AMD) | `UID512_0` (AMD) 與 `UID409858_0` (NV)<br>**兩者同時 `Active = true`** | **僅 `UID409858_0` (NVIDIA 單一實例)** |
+| **輸出技術代碼 (`VideoOutputTechnology`)** | `2147483648` (`0x80000000`)<br>`INTERNAL` (內建顯示器) | **`10`**<br>`DISPLAYPORT_EXTERNAL` (偽裝成外接 DP 螢幕) | **`11`**<br>`DISPLAYPORT_EMBEDDED` (原生內嵌 eDP 面板) |
+| **背光控制權 (`WmiMonitorBrightness`)** | 綁定於 `UID512_0` (AMD 內顯轉發) | **仍綁定於 `UID512_0` (AMD 內顯轉發)**<br>*(畫面歸 NV，但背光仍由 AMD 控制)* | **完整移交予 `UID409858_0` (NVIDIA 獨顯直接控制)** |
+| **EDID 緩存大小** | 384 Bytes (含 128 Bytes 空填充) | 256 Bytes | 256 Bytes |
+| **ASUS Splendid 介入能力** | 有 (`SupportAMD=1`，故需清死碼) | 無 (`SupportNV=0` 且非 `INTERNAL`) | 無 (`SupportNV=0` 且非 `INTERNAL`) |
 
 ---
 

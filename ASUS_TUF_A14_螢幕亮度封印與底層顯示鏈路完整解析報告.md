@@ -203,7 +203,19 @@
     * `-1` (`0xFFFFFFFF` / `4294967295`) = **175%**（你目前的設定，168 DPI）
     * `-2` (`0xFFFFFFFE` / `4294967294`) = **150%**（144 DPI）
 
-#### (C) 已徹底停用的 7 個華碩背景服務與 4 個隱藏工作排程
+#### (C) Windows 11 原生「夜間光線（Night Light）」CloudStore 二進位參數解析
+* **登錄檔路徑**：`HKCU\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\`
+  * 狀態機碼：`default$windows.data.bluelightreduction.bluelightreductionstate\...\Data`
+  * 設定機碼：`default$windows.data.bluelightreduction.settings\...\Data`
+* **二進位結構解碼（`REG_BINARY` Protobuf-like CB 格式）**：
+  * **`02-01`**：排程總開關（`02-01` = 已開啟自動排程；若無此欄位則為關閉）。
+  * **`CA-14-0E-<Hour>-<Min>`**：自訂排程開始時間（預設 `0E-15-00` = `21:00`）。
+  * **`CA-1E-0E-<Hour>-<Min>`**：自訂排程結束時間（預設 `0E-07-00` = `07:00`）。
+  * **`CA-32-0E-<Hour>-2E-<Min>-00`**：定位計算之**今日日落時間**（實測值：`0E-11-2E-24` = `0x11` 時 `0x24` 分 = **`17:36`**）。
+  * **`CA-3C-0E-<Hour>-2E-<Min>-00`**：定位計算之**明日日出時間**（實測值：`0E-05-2E-36` = `0x05` 時 `0x36` 分 = **`05:54`**）。
+  * **底層優勢**：走 Windows DWM 獨立色溫矩陣，僅按黑體輻射曲線平滑衰減藍光，不破壞灰階對比、不壓縮峰值亮度，且日出時 100% 自動歸零還原為單位矩陣，不會產生像華碩 `EyeCareLevel=4` 的卡死問題。
+
+#### (D) 已徹底停用的 7 個華碩背景服務與 4 個隱藏工作排程
 
 | 類別 | 名稱 | 清理前狀態 | 清理後狀態 | 為何必須停用 |
 | :--- | :--- | :--- | :--- | :--- |

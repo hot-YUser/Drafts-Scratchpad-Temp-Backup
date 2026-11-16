@@ -103,9 +103,8 @@ def pick(d, fid):
 
 
 def size_of(fmt):
-    for k in ("filesize", "filesize_approx"):
-        if fmt.get(k):
-            return int(fmt[k])
+    """一律向 CDN 問真實總長。JSON 的 filesize_approx 常比實際小幾 KB，
+    照它 truncate 會把尾端切掉（實測 p3 差 4,752 bytes）。"""
     req = urllib.request.Request(fmt["url"], headers={
         "User-Agent": UA, "Referer": REF, "Range": "bytes=0-0"})
     with urllib.request.urlopen(req, timeout=30) as r:
@@ -173,6 +172,17 @@ def download(url, path, total):
             print(f"{cur/1073741824:6.2f}/{total/1073741824:6.2f} GiB  "
                   f"{cur/1048576/max(time.time()-t0,1e-9):5.2f} MiB/s", flush=True)
             last = cur
+    # 尾部保險：長度不足就延伸並重抓最後幾塊，避免檔案尾端被切
+    if os.path.getsize(path) < total:
+        with open(path, "r+b") as f:
+            f.truncate(total)
+        for i in range(len(bounds) - 1, max(len(bounds) - 4, -1), -1):
+            s0, e0 = bounds[i]
+            data = fetch(url, s0, e0)
+            with open(path, "r+b") as f:
+                f.seek(s0); f.write(data)
+            done.add(i)
+        json.dump(sorted(done), open(done_path, "w"))
     if errs:
         raise RuntimeError(f"{len(errs)} chunk failures: {errs[:3]}")
 
@@ -218,6 +228,7 @@ python dl.py 3 "D:\LoveLive_15th_Fes" 30112
 | 每塊檢查回傳長度 | CDN 會回短讀（幾百 bytes），不檢查會寫進殘缺資料 |
 | `.done` 與資料檔必須成對存在 | 只留 `.done` 而資料檔被刪，重跑會跳過全部區塊，產出全零檔案（音軌靜音就是這樣來的） |
 | 預先 `truncate(total)` | Windows 的 NTFS 不支援稀疏檔，這一步會立刻佔滿磁碟 |
+| 總長一律問 CDN | `yt-dlp -J` 的 `filesize_approx` 常比實際小，照它切會少抓尾端（實測差 4,752 bytes） |
 | 完成後才 `ffmpeg -c copy` 合併 | 音視訊分軌下載，合併需要額外約一個成品大小的空間 |
 
 ## 七、鏡像選擇
@@ -291,6 +302,7 @@ yt-dlp 的 `fs` 編碼是 utf-8，但 Windows 主控台 locale 是 cp936。標�
 | 音軌全靜音、影片正常 | `.done` 存在但資料檔已刪，全部區塊被跳過 | `.done` 與資料檔必須成對刪 |
 | 合併階段空間不足 | 成品另佔一份空間 | 先清出至少一個成品的空間 |
 | 日誌檔名亂碼 | cp936 顯示不了星體字元 | 不影響，`ls` 確認即可 |
+| 合併時噴 `Invalid NAL unit size` / `Input buffer exhausted` | Bilibili 的 m4s 尾端封包本身殘缺（實測多 24 / 202 bytes），屬來源特性 | 先確認檔案長度等於 CDN 總長，長度正確就別重抓 |
 
 ## 十三、實測數據
 
